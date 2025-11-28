@@ -7,15 +7,14 @@ load_dotenv()
 
 # 2. Check Key
 if not os.getenv("OPENAI_API_KEY"):
-    print("❌ ERROR: OPENAI_API_KEY not found. Please check your .env file.")
+    print("ERROR: OPENAI_API_KEY not found. Please check your .env file.")
     exit()
 
-# 3. Import your pipeline
-# This works because main.py is in the root, so it can see the 'src' folder
+# 3. Import pipeline
 from src.pipeline import run_pipeline
 
 if __name__ == "__main__":
-    print("## 🏦 Initializing Banking Agent System ##")
+    print("## Initializing Banking Agent System ##")
     
     # 4. Define test question
     question = "What does the document say about interest rate risks?"
