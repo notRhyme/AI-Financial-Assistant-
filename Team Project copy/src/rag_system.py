@@ -11,44 +11,49 @@ PERSIST_DIR = "chroma_finance_db"
 
 def get_vectorstore():
     """
-    Lazy loader for the vector store. 
-    Only connects to OpenAI when this function is actually called.
+    Lazy loader: Connects to OpenAI only when needed.
+    Prevents crash on startup if API key/billing is invalid.
     """
+    # 1. Check for API Key first
+    if not os.getenv("OPENAI_API_KEY"):
+        print("❌ ERROR: OPENAI_API_KEY is missing.")
+        return None
+
     embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
+    # 2. Load existing DB if it exists
     if os.path.exists(PERSIST_DIR):
         return Chroma(persist_directory=PERSIST_DIR, embedding_function=embeddings)
 
-    if not os.path.exists(PDF_PATH):
-        # Fallback for testing if PDF is missing
-        print(f"⚠️ WARNING: {PDF_PATH} not found. RAG will not work.")
-        return None
-
-    print("--- ⚙️ Indexing PDF (This costs API credits) ---")
-    try:
-        loader = PyPDFLoader(PDF_PATH)
-        docs = loader.load()
-        splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=200)
-        chunks = splitter.split_documents(docs)
-        
-        db = Chroma.from_documents(
-            documents=chunks,
-            embedding=embeddings,
-            persist_directory=PERSIST_DIR
-        )
-        return db
-    except Exception as e:
-        print(f"❌ RAG SETUP ERROR: {e}")
-        return None
+    # 3. Create new DB if PDF exists
+    if os.path.exists(PDF_PATH):
+        print("--- ⚙️ Indexing PDF (This costs API credits) ---")
+        try:
+            loader = PyPDFLoader(PDF_PATH)
+            docs = loader.load()
+            splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=200)
+            chunks = splitter.split_documents(docs)
+            
+            db = Chroma.from_documents(
+                documents=chunks,
+                embedding=embeddings,
+                persist_directory=PERSIST_DIR
+            )
+            return db
+        except Exception as e:
+            print(f"❌ RAG INDEXING ERROR: {e}")
+            return None
+    
+    return None
 
 def rag_query(question: str) -> List[Dict]:
     """
-    Safe query function that handles missing DB or API errors gracefully.
+    Safe query function that handles errors gracefully.
     """
     try:
-        db = get_vectorstore() # Initialize only when needed
+        db = get_vectorstore()
         if not db:
-            return [{"text": "Database not initialized.", "source": "System"}]
+            return [{"text": "Database unavailable.", "source": "System"}]
 
         docs = db.similarity_search(question, k=3)
         results = []
@@ -61,4 +66,5 @@ def rag_query(question: str) -> List[Dict]:
             })
         return results
     except Exception as e:
+        # Catch billing/API errors here so the whole app doesn't die
         return [{"text": f"Error querying database: {e}", "source": "System"}]
